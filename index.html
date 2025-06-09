@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Google Sheets Data Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    .name-column {
+      max-width: 150px;
+      white-space: normal;
+      word-break: break-word;
+      text-align: left;
+    }
+
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background-color: #f7f9fb;
+      color: #333;
+    }
+
+    #table-container {
+      overflow: auto;
+      width: 100vw;
+      height: calc(100vh - 60px);
+    }
+
+    table {
+      border-collapse: collapse;
+      min-width: 800px;
+      width: max-content;
+      background: white;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #eaeaea;
+      border-right: 1px solid #e0e0e0;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: none;
+    }
+
+    th {
+      background-color: #2c3e50;
+      color: white;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    th:first-child,
+    td:first-child {
+      position: sticky;
+      left: 0;
+      background: #f4f4f4;
+      font-weight: bold;
+      z-index: 1;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    img {
+      max-width: 100px;
+      max-height: 100px;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+    }
+
+    #pagination {
+      text-align: center;
+      padding: 10px;
+      background: #fff;
+      position: sticky;
+      bottom: 0;
+    }
+
+    #pagination button {
+      margin: 0 4px;
+      padding: 6px 12px;
+      background: #2c3e50;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #pagination button.active {
+      background: #3498db;
+    }
+
+    #pagination button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    /* 模态框样式 */
+    #image-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    #image-modal img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="table-container"><div id="output">Loading...</div></div>
+  <div id="pagination"></div>
+
+  <!-- 模态框 -->
+  <div id="image-modal" onclick="hideImageModal()">
+    <img id="modal-img" src="" alt="Preview" />
+  </div>
+
+  <script>
+    const sheetID = '1kxOQXex_hv-52f65-EoLvutHmhb8QzvjO6uEra5UeOo';
+    const sheetName = 'Sheet1';
+    const query = encodeURIComponent('SELECT *');
+    const url = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?sheet=${sheetName}&tq=${query}`;
+    const pageSize = 100;
+
+    let rows = [];
+    let titleRow = [];
+    let isImageColumn = [];
+    let isFromColumn = [];
+
+    function renderTable(page) {
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      const pageRows = rows.slice(start, end);
+
+      let html = '<table><tr>';
+      html += '<th>#</th>';
+      titleRow.forEach((title, index) => {
+        const isNameColumn = title.toLowerCase() === 'name';
+        html += `<th${isNameColumn ? ' class="name-column"' : ''}>${title}</th>`;
+      });
+      html += '</tr>';
+
+      for (let i = 0; i < pageRows.length; i++) {
+        const row = pageRows[i];
+        html += '<tr>';
+        html += `<td>${start + i + 1}</td>`;
+        row.c.forEach((cell, colIndex) => {
+          const value = cell?.v ?? '';
+          const isNameColumn = titleRow[colIndex].toLowerCase() === 'name';
+
+          if (isImageColumn[colIndex]) {
+            html += value
+              ? `<td><img src="${value}" alt="image" onclick="showImageModal('${value.replace(/'/g, "\\'")}')" /></td>`
+              : '<td></td>';
+          } else if (isFromColumn[colIndex]) {
+            html += value
+              ? `<td><a href="${value}" target="_blank">Source</a></td>`
+              : '<td></td>';
+          } else {
+            html += `<td${isNameColumn ? ' class="name-column"' : ''}>${value}</td>`;
+          }
+        });
+        html += '</tr>';
+      }
+
+      html += '</table>';
+      document.getElementById('output').innerHTML = html;
+    }
+
+    function renderPagination(totalPages, currentPage) {
+      const pagination = document.getElementById('pagination');
+      let html = '';
+
+      for (let i = 1; i <= totalPages; i++) {
+        html += `<button ${i === currentPage ? 'class="active"' : ''} onclick="changePage(${i})">${i}</button>`;
+      }
+
+      pagination.innerHTML = html;
+    }
+
+    function changePage(page) {
+      localStorage.setItem('currentPage', page);
+      renderTable(page);
+      renderPagination(Math.ceil(rows.length / pageSize), page);
+    }
+
+    function showImageModal(src) {
+      const modal = document.getElementById('image-modal');
+      const modalImg = document.getElementById('modal-img');
+      modalImg.src = src;
+      modal.style.display = 'flex';
+    }
+
+    function hideImageModal() {
+      const modal = document.getElementById('image-modal');
+      modal.style.display = 'none';
+      document.getElementById('modal-img').src = '';
+    }
+
+    fetch(url)
+      .then(res => res.text())
+      .then(rep => {
+        const json = JSON.parse(rep.match(/google\.visualization\.Query\.setResponse\((.*)\);/)[1]);
+        const table = json.table;
+
+        const hasHeader = table.cols.filter(col => col.label).length
+        if(hasHeader){
+          titleRow = table.cols.map(col => col.label);
+        }else {
+          titleRow = table.rows[0].c.map(cell => cell?.v ?? '');
+        }
+
+        isImageColumn = titleRow.map(title => title.toLowerCase().startsWith('image'));
+        isFromColumn = titleRow.map(title => title.toLowerCase().startsWith('from'));
+
+        rows = hasHeader ? table.rows : table.rows.slice(1); // 去掉标题行
+
+        const savedPage = parseInt(localStorage.getItem('currentPage'), 10);
+        const initialPage = !isNaN(savedPage) && savedPage > 0 ? savedPage : 1;
+        changePage(initialPage);
+      })
+      .catch(err => {
+        document.getElementById('output').innerText = '加载失败：' + err;
+        console.error(err);
+      });
+  </script>
+</body>
+</html>
